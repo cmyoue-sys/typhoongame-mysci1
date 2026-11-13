@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>태풍 키우기 시뮬레이터</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4A90E2;
+            --danger: #E74C3C;
+            --warning: #F1C40F;
+            --success: #2ECC71;
+            --bg-ui: rgba(255, 255, 255, 0.85);
+        }
+        
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: #1a1a2e;
+            font-family: 'Jua', sans-serif;
+            overflow: hidden; /* 스크롤 방지 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%; height: 100%;
+        }
+
+        /* UI 레이어 (절대 위치 지정) */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* 클릭 통과 */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* HUD (상태창) */
+        #hud {
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: auto; /* HUD 요소는 클릭 가능하게 (필요시) */
+        }
+
+        .panel {
+            background: var(--bg-ui);
+            padding: 15px 25px;
+            border-radius: 20px;
+            box-shadow: 0 8px 0 rgba(0,0,0,0.15);
+            border: 4px solid #fff;
+        }
+
+        #timer-ui {
+            font-size: 36px;
+            color: var(--danger);
+            background: var(--bg-ui);
+            padding: 15px 25px;
+            border-radius: 20px;
+            box-shadow: 0 8px 0 rgba(0,0,0,0.15);
+            border: 4px solid #fff;
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+            font-weight: bold;
+        }
+
+        #level-info {
+            font-size: 28px;
+            color: #333;
+            text-align: center;
+        }
+
+        #level-name {
+            font-size: 36px;
+            color: var(--primary);
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+            margin-bottom: 5px;
+        }
+
+        .progress-bg {
+            width: 300px;
+            height: 25px;
+            background: #eee;
+            border-radius: 12px;
+            border: 3px solid #ccc;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #f39c12, #f1c40f);
+            width: 20%; /* 동적 변경 */
+            transition: width 0.2s ease-out;
+        }
+
+        #energy-text {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            color: #333;
+            line-height: 1;
+        }
+
+        /* 퀘스트 / 목표 패널 */
+        #quest-panel {
+            text-align: right;
+        }
+        #quest-title {
+            font-size: 20px; color: #666;
+        }
+        #quest-desc {
+            font-size: 24px; color: var(--danger);
+        }
+
+        /* 조작법 안내 (하단) */
+        #controls-info {
+            align-self: center;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            font-size: 20px;
+            letter-spacing: 1px;
+        }
+
+        /* 모달 창 (시작, 종료, 승리) */
+        .modal-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 100;
+        }
+
+        .modal-box {
+            background: white;
+            padding: 40px;
+            border-radius: 30px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            border: 8px solid var(--primary);
+            max-width: 600px;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-title {
+            font-size: 50px;
+            color: var(--primary);
+            margin: 0 0 20px 0;
+        }
+
+        .modal-desc {
+            font-size: 24px;
+            color: #555;
+            line-height: 1.5;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            font-family: 'Jua', sans-serif;
+            font-size: 30px;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #2c81ba;
+            transition: all 0.1s;
+        }
+        .btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #2c81ba;
+        }
+
+        .btn-danger { background: var(--danger); box-shadow: 0 6px 0 #c0392b; }
+        .btn-success { background: var(--success); box-shadow: 0 6px 0 #27ae60; }
+
+        .hidden { display: none !important; }
+
+        /* 화면 붉은 번쩍임 효과 (데미지) */
+        #damage-overlay {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(231, 76, 60, 0.3);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 캔버스 (게임 월드) -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 데미지 효과 레이어 -->
+    <div id="damage-overlay"></div>
+
+    <!-- UI 레이어 -->
+    <div id="ui-layer">
+        
+        <!-- 게임 중 HUD -->
+        <div id="hud" class="hidden">
+            <div id="timer-ui">⏱️ 00:00</div>
+            <div class="panel">
+                <div id="level-name">Lv.1 열대저압부</div>
+                <div id="level-info">에너지 (수증기)</div>
+                <div class="progress-bg">
+                    <div id="energy-bar" class="progress-bar"></div>
+                    <div id="energy-text">50 / 100</div>
+                </div>
+            </div>
+            
+            <div id="quest-panel" class="panel">
+                <div id="quest-title">현재 목표</div>
+                <div id="quest-desc">붉은 수증기를 모아 성장하세요!</div>
+            </div>
+        </div>
+
+        <div id="controls-info" class="hidden">
+            ⌨️ 이동: W, A, S, D 또는 방향키
+        </div>
+    </div>
+
+    <!-- 시작 화면 모달 -->
+    <div id="start-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h1 class="modal-title">태풍 키우기 시뮬레이터</h1>
+            <p class="modal-desc">
+                지구의 열을 식히기 위해 태어난 <strong>'아기 태풍 씨앗'</strong>을 키워주세요!<br>
+                <strong>붉은색 수증기(잠열)</strong>를 먹고 에너지를 키우며 진화합니다.<br><br>
+                ⚠️ <strong>초록색 육지</strong>나 <strong>푸른 찬 바다</strong>에 닿으면<br>에너지가 깎이고 태풍이 소멸할 수 있습니다!<br><br>
+                <strong>Lv.5 초강력 태풍</strong>으로 성장하여 목표 지점에 상륙하세요!
+            </p>
+            <button class="btn" onclick="startGame()">게임 시작</button>
+        </div>
+    </div>
+
+    <!-- 게임 오버 모달 -->
+    <div id="gameover-modal" class="modal-overlay hidden">
+        <div class="modal-box" style="border-color: var(--danger);">
+            <h1 class="modal-title" style="color: var(--danger);">태풍 소멸</h1>
+            <p class="modal-desc" id="gameover-reason">
+                에너지를 모두 잃어 온대저기압으로 변질되었습니다.<br>
+                수증기를 제때 공급받지 못했거나 육지와 충돌했습니다.
+            </p>
+            <button class="btn btn-danger" onclick="resetGame()">다시 도전하기</button>
+        </div>
+    </div>
+
+    <!-- 승리 모달 -->
+    <div id="win-modal" class="modal-overlay hidden">
+        <div class="modal-box" style="border-color: var(--success);">
+            <h1 class="modal-title" style="color: var(--success);">상륙 성공!</h1>
+            <p class="modal-desc" id="win-stats">
+                축하합니다!<br>목표 지점에 성공적으로 상륙했습니다.<br>
+                <strong>최종 등급: 초강력 태풍</strong>
+            </p>
+            <h2 id="final-time-record" style="font-size: 45px; color: var(--danger); margin: 20px 0; text-shadow: 2px 2px 0px rgba(0,0,0,0.1);">⏱️ 최종 기록: 00분 00초!</h2>
+            <p class="modal-desc" style="font-size: 20px; color: var(--primary);">
+                "이 위력적인 태풍 데이터와 타임 기록을 가지고<br>AI 예보관에게 특보 대본을 요청하세요!"
+            </p>
+            <button class="btn btn-success" onclick="resetGame()">새로운 태풍 만들기</button>
+        </div>
+    </div>
+
+<script>
+    /**
+     * 태풍 시뮬레이터 게임 로직
+     */
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI 엘리먼트
+    const ui = {
+        hud: document.getElementById('hud'),
+        controls: document.getElementById('controls-info'),
+        startModal: document.getElementById('start-modal'),
+        gameoverModal: document.getElementById('gameover-modal'),
+        winModal: document.getElementById('win-modal'),
+        levelName: document.getElementById('level-name'),
+        energyBar: document.getElementById('energy-bar'),
+        energyText: document.getElementById('energy-text'),
+        questDesc: document.getElementById('quest-desc'),
+        damageOverlay: document.getElementById('damage-overlay'),
+        winStats: document.getElementById('win-stats'),
+        timerUi: document.getElementById('timer-ui'),
+        finalTimeRecord: document.getElementById('final-time-record')
+    };
+
+    // 월드 및 게임 설정
+    const WORLD_SIZE = 2500; // 넓은 맵
+    let gameState = 'START'; // START, PLAYING, GAMEOVER, WIN
+    let lastTime = 0;
+    let gameStartTime = 0;
+
+    // 입력 상태
+    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+
+    // 키보드 이벤트 리스너
+    window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+    window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+
+    // 윈도우 리사이즈 처리
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // 태풍 (플레이어) 객체
+    let player = {
+        x: WORLD_SIZE / 2,
+        y: WORLD_SIZE - 500,
+        radius: 30,
+        energy: 50,
+        maxEnergy: 100,
+        level: 1,
+        angle: 0,
+        speed: 300, // 픽셀/초
+        drainRate: 2, // 초당 에너지 감소량
+        color: '#ffffff'
+    };
+
+    // 태풍 등급별 설정치
+    const LEVELS = [
+        { name: "Lv.1 열대저압부 (씨앗)", maxEnergy: 100, reqEnergy: 0, radius: 30, color: "#74b9ff" },
+        { name: "Lv.2 소형 태풍", maxEnergy: 300, reqEnergy: 100, radius: 50, color: "#0984e3" },
+        { name: "Lv.3 중형 태풍", maxEnergy: 600, reqEnergy: 300, radius: 80, color: "#6c5ce7" },
+        { name: "Lv.4 대형 태풍", maxEnergy: 1000, reqEnergy: 600, radius: 120, color: "#273c75" },
+        { name: "Lv.5 초강력 태풍", maxEnergy: 1500, reqEnergy: 1000, radius: 170, color: "#192a56" }
+    ];
+
+    // 게임 엔티티 배열
+    let orbs = [];
+    let islands = [];
+    let coldWaters = [];
+    let floatingTexts = [];
+    
+    // 최종 목표 (한국 등 상륙지)
+    const TARGET_ZONE = {
+        x: WORLD_SIZE - 400,
+        y: 400,
+        radius: 200,
+        active: false // 레벨 5가 되면 활성화
+    };
+
+    // 카메라 객체
+    let camera = { x: 0, y: 0 };
+
+    // --- 유틸 함수 ---
+    const distance = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+    const randomRange = (min, max) => Math.random() * (max - min) + min;
+
+    // 플로팅 텍스트 생성
+    function addFloatingText(x, y, text, color) {
+        floatingTexts.push({
+            x: x, y: y, text: text, color: color,
+            life: 1.0, vy: -50 // 위로 올라가는 속도
+        });
+    }
+
+    // --- 월드 생성 ---
+    function generateWorld() {
+        orbs = [];
+        islands = [];
+        coldWaters = [];
+
+        // 1. 수증기 (오브) 생성
+        for(let i=0; i<150; i++) {
+            spawnOrb();
+        }
+
+        // 2. 육지 (장애물) 생성
+        for(let i=0; i<15; i++) {
+            // 목표지점 주변은 피해서 생성
+            let ix, iy;
+            do {
+                ix = randomRange(200, WORLD_SIZE-200);
+                iy = randomRange(200, WORLD_SIZE-200);
+            } while (distance(ix, iy, TARGET_ZONE.x, TARGET_ZONE.y) < 500);
+
+            islands.push({
+                x: ix, y: iy,
+                radius: randomRange(80, 200)
+            });
+        }
+
+        // 3. 찬 바다 (냉수대) 생성
+        for(let i=0; i<10; i++) {
+            coldWaters.push({
+                x: randomRange(300, WORLD_SIZE-300),
+                y: randomRange(300, WORLD_SIZE-300),
+                radius: randomRange(150, 300)
+            });
+        }
+    }
+
+    function spawnOrb() {
+        orbs.push({
+            x: randomRange(100, WORLD_SIZE-100),
+            y: randomRange(100, WORLD_SIZE-100),
+            radius: 12,
+            hoverOffset: Math.random() * Math.PI * 2
+        });
+    }
+
+    // --- 게임 제어 함수 ---
+    window.startGame = function() {
+        ui.startModal.classList.add('hidden');
+        ui.hud.classList.remove('hidden');
+        ui.controls.classList.remove('hidden');
+        resetPlayer();
+        generateWorld();
+        gameState = 'PLAYING';
+        lastTime = performance.now();
+        gameStartTime = performance.now();
+        ui.timerUi.innerText = "⏱️ 00:00";
+        requestAnimationFrame(gameLoop);
+    };
+
+    window.resetGame = function() {
+        ui.gameoverModal.classList.add('hidden');
+        ui.winModal.classList.add('hidden');
+        startGame();
+    };
+
+    function resetPlayer() {
+        player.x = WORLD_SIZE / 2;
+        player.y = WORLD_SIZE - 300;
+        player.energy = 50;
+        player.level = 1;
+        TARGET_ZONE.active = false;
+        ui.questDesc.innerText = "붉은 수증기를 모아 성장하세요!";
+        updatePlayerStats();
+    }
+
+    function gameOver(reason) {
+        gameState = 'GAMEOVER';
+        ui.hud.classList.add('hidden');
+        ui.controls.classList.add('hidden');
+        ui.gameoverModal.classList.remove('hidden');
+        document.getElementById('gameover-reason').innerText = reason;
+    }
+
+    function gameWin() {
+        gameState = 'WIN';
+        ui.hud.classList.add('hidden');
+        ui.controls.classList.add('hidden');
+        ui.winModal.classList.remove('hidden');
+        
+        let totalSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
+        let m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+        let s = (totalSeconds % 60).toString().padStart(2, '0');
+        ui.finalTimeRecord.innerText = `⏱️ 최종 기록: ${m}분 ${s}초!`;
+
+        let pressure = 1000 - Math.floor(player.energy / 20); // 가상 기압 계산
+        ui.winStats.innerHTML = `
+            축하합니다!<br>목표 지점에 성공적으로 상륙했습니다.<br><br>
+            <strong>최종 등급: ${LEVELS[player.level-1].name}</strong><br>
+            중심 기압: <strong>${pressure}hPa</strong><br>
+            최대 풍반경: <strong>${Math.floor(player.radius * 3)}km</strong>
+        `;
+    }
+
+    // --- 레벨 업데이트 ---
+    function updatePlayerStats() {
+        // 최대 에너지를 넘어서면 레벨업 확인
+        let nextLevelIndex = player.level;
+        for (let i = 0; i < LEVELS.length; i++) {
+            if (player.energy >= LEVELS[i].reqEnergy) {
+                nextLevelIndex = i + 1;
+            }
+        }
+
+        // 레벨업 처리
+        if (nextLevelIndex > player.level) {
+            player.level = nextLevelIndex;
+            addFloatingText(player.x, player.y - 50, "레벨 업!", "#2ECC71");
+            
+            // 5레벨 달성 시 목표 활성화
+            if (player.level === 5 && !TARGET_ZONE.active) {
+                TARGET_ZONE.active = true;
+                addFloatingText(player.x, player.y, "상륙 목표지점 발견!", "#F1C40F");
+                ui.questDesc.innerText = "북동쪽(우상단)의 상륙 목표 지점으로 이동하세요!";
+                ui.questDesc.style.color = "#2ECC71";
+            }
+        }
+
+        // 다운그레이드 처리 (원한다면 제거 가능, 시뮬레이터 류는 보통 다운그레이드 있음)
+        if (nextLevelIndex < player.level) {
+            player.level = nextLevelIndex;
+            addFloatingText(player.x, player.y - 50, "세력 약화...", "#E74C3C");
+            if(player.level < 5 && TARGET_ZONE.active) {
+                TARGET_ZONE.active = false;
+                ui.questDesc.innerText = "붉은 수증기를 모아 다시 성장하세요!";
+                ui.questDesc.style.color = "var(--danger)";
+            }
+        }
+
+        let curLevelData = LEVELS[player.level - 1];
+        player.maxEnergy = curLevelData.maxEnergy;
+        
+        // 크기가 서서히 변하도록(보간 효과는 update에 적용) 목표 반지름 설정
+        player.targetRadius = curLevelData.radius;
+        player.color = curLevelData.color;
+
+        // UI 갱신
+        ui.levelName.innerText = curLevelData.name;
+        ui.levelName.style.color = player.level === 5 ? '#8c7ae6' : 'var(--primary)';
+        
+        let percent = (player.energy / player.maxEnergy) * 100;
+        percent = Math.max(0, Math.min(100, percent));
+        ui.energyBar.style.width = percent + '%';
+        ui.energyText.innerText = `${Math.floor(player.energy)} / ${player.maxEnergy}`;
+    }
+
+    // --- 업데이트 (물리 및 논리) ---
+    function update(dt) {
+        if (gameState !== 'PLAYING') return;
+
+        // 1. 플레이어 이동
+        let dx = 0, dy = 0;
+        if (keys.w || keys.ArrowUp) dy -= 1;
+        if (keys.s || keys.ArrowDown) dy += 1;
+        if (keys.a || keys.ArrowLeft) dx -= 1;
+        if (keys.d || keys.ArrowRight) dx += 1;
+
+        // 대각선 이동 정규화
+        if (dx !== 0 && dy !== 0) {
+            let length = Math.hypot(dx, dy);
+            dx /= length;
+            dy /= length;
+        }
+
+        // 크기가 클수록 속도가 약간 느려짐 (무게감)
+        let currentSpeed = player.speed * (1 - (player.level * 0.05));
+        
+        player.x += dx * currentSpeed * dt;
+        player.y += dy * currentSpeed * dt;
+
+        // 맵 경계 제한
+        player.x = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.x));
+        player.y = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.y));
+
+        // 부드러운 반경 변화
+        if(player.radius < player.targetRadius) player.radius += 10 * dt;
+        if(player.radius > player.targetRadius) player.radius -= 10 * dt;
+
+        // 회전 (북반구 태풍의 반시계 방향 회전을 위해 음수 유지 및 속도감 상향)
+        player.angle -= (4 + (5-player.level)*0.8) * dt; 
+
+        // 2. 카메라 추적 (부드럽게)
+        let targetCamX = player.x - canvas.width / 2;
+        let targetCamY = player.y - canvas.height / 2;
+        
+        // 맵 끝부분 카메라 고정
+        targetCamX = Math.max(0, Math.min(WORLD_SIZE - canvas.width, targetCamX));
+        targetCamY = Math.max(0, Math.min(WORLD_SIZE - canvas.height, targetCamY));
+
+        camera.x += (targetCamX - camera.x) * 5 * dt;
+        camera.y += (targetCamY - camera.y) * 5 * dt;
+
+        // 3. 자원 자연 감소
+        player.energy -= player.drainRate * dt;
+        let onLand = false;
+
+        // 4. 충돌 검사
+        // 수증기 (오브)
+        for (let i = orbs.length - 1; i >= 0; i--) {
+            let o = orbs[i];
+            if (distance(player.x, player.y, o.x, o.y) < player.radius + o.radius) {
+                // 수집
+                player.energy += 15;
+                addFloatingText(o.x, o.y, "+15 수증기", "#F1C40F");
+                orbs.splice(i, 1);
+                spawnOrb(); // 새 수증기 생성
+            }
+        }
+
+        // 육지 (지면 마찰)
+        for (let land of islands) {
+            if (distance(player.x, player.y, land.x, land.y) < player.radius + land.radius) {
+                onLand = true;
+                player.energy -= 40 * dt; // 엄청난 데미지
+                
+                // 마찰 파티클 텍스트
+                if (Math.random() < 0.1) {
+                    addFloatingText(player.x + randomRange(-30,30), player.y + randomRange(-30,30), "-마찰!", "#E74C3C");
+                }
+            }
+        }
+
+        // 찬 바다
+        for (let cw of coldWaters) {
+             if (distance(player.x, player.y, cw.x, cw.y) < player.radius + cw.radius) {
+                player.energy -= 10 * dt; 
+                if (Math.random() < 0.05) addFloatingText(player.x, player.y, "냉각...", "#3498DB");
+             }
+        }
+
+        // 데미지 시각 효과 (화면 붉게)
+        if (onLand) ui.damageOverlay.style.opacity = '1';
+        else ui.damageOverlay.style.opacity = '0';
+
+        // 상륙 목표지점 충돌 (승리 조건)
+        if (TARGET_ZONE.active) {
+            if (distance(player.x, player.y, TARGET_ZONE.x, TARGET_ZONE.y) < player.radius + TARGET_ZONE.radius) {
+                gameWin();
+            }
+        }
+
+        // 사망 처리
+        if (player.energy <= 0) {
+            gameOver(onLand ? "육지와의 마찰로 인해 에너지를 모두 잃었습니다." : "수증기를 제때 공급받지 못해 에너지가 고갈되었습니다.");
+        }
+
+        // 상태 UI 갱신
+        updatePlayerStats();
+
+        // 플로팅 텍스트 업데이트
+        for (let i = floatingTexts.length - 1; i >= 0; i--) {
+            let ft = floatingTexts[i];
+            ft.y += ft.vy * dt;
+            ft.life -= dt * 1.5;
+            if (ft.life <= 0) floatingTexts.splice(i, 1);
+        }
+
+        // 타이머 업데이트
+        let totalSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
+        let m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+        let s = (totalSeconds % 60).toString().padStart(2, '0');
+        ui.timerUi.innerText = `⏱️ ${m}:${s}`;
+    }
+
+    // --- 렌더링 ---
+    function draw() {
+        // 배경 그리기 (해양)
+        ctx.fillStyle = '#0a3d62'; // 깊은 바다색
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 월드 좌표계 적용
+        ctx.save();
+        ctx.translate(-camera.x, -camera.y);
+
+        // 그리드 (움직임 체감용)
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 2;
+        const gridSize = 100;
+        const startX = Math.floor(camera.x / gridSize) * gridSize;
+        const startY = Math.floor(camera.y / gridSize) * gridSize;
+        
+        ctx.beginPath();
+        for (let x = startX; x < camera.x + canvas.width; x += gridSize) {
+            ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + canvas.height);
+        }
+        for (let y = startY; y < camera.y + canvas.height; y += gridSize) {
+            ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + canvas.width, y);
+        }
+        ctx.stroke();
+
+        // 찬 바다 그리기
+        ctx.fillStyle = 'rgba(60, 99, 130, 0.5)';
+        for (let cw of coldWaters) {
+            ctx.beginPath(); ctx.arc(cw.x, cw.y, cw.radius, 0, Math.PI*2); ctx.fill();
+        }
+
+        // 육지 그리기
+        for (let land of islands) {
+            ctx.fillStyle = '#78e08f';
+            ctx.beginPath(); ctx.arc(land.x, land.y, land.radius, 0, Math.PI*2); ctx.fill();
+            
+            // 약간의 입체감 (섬 안쪽 테두리)
+            ctx.lineWidth = 10;
+            ctx.strokeStyle = '#38ada9';
+            ctx.stroke();
+        }
+
+        // 상륙 목표 지점 (한국)
+        if (TARGET_ZONE.active) {
+            // 눈에 띄게 반짝이는 이펙트
+            let pulse = Math.abs(Math.sin(performance.now() / 200));
+            ctx.fillStyle = `rgba(231, 76, 60, ${0.2 + pulse * 0.3})`;
+            ctx.beginPath(); ctx.arc(TARGET_ZONE.x, TARGET_ZONE.y, TARGET_ZONE.radius + (pulse*20), 0, Math.PI*2); ctx.fill();
+            
+            ctx.fillStyle = '#f1c40f'; // 노란색 섬
+            ctx.beginPath(); ctx.arc(TARGET_ZONE.x, TARGET_ZONE.y, TARGET_ZONE.radius, 0, Math.PI*2); ctx.fill();
+            
+            ctx.fillStyle = '#333';
+            ctx.font = '40px Jua';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText("최종 상륙지", TARGET_ZONE.x, TARGET_ZONE.y);
+        }
+
+        // 수증기 그리기
+        const time = performance.now() / 150;
+        for (let o of orbs) {
+            let hoverY = o.y + Math.sin(time + o.hoverOffset) * 5;
+            
+            // 후광 효과
+            let grad = ctx.createRadialGradient(o.x, hoverY, 0, o.x, hoverY, o.radius * 2);
+            grad.addColorStop(0, 'rgba(255, 99, 71, 0.8)');
+            grad.addColorStop(1, 'rgba(255, 99, 71, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(o.x, hoverY, o.radius * 2, 0, Math.PI*2); ctx.fill();
+
+            // 본체
+            ctx.fillStyle = '#ff6b81';
+            ctx.beginPath(); ctx.arc(o.x, hoverY, o.radius, 0, Math.PI*2); ctx.fill();
+        }
+
+        // 플레이어(태풍) 그리기
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        
+        // 1. 회전하는 구름 소용돌이 이펙트 (북반구 반시계 방향)
+        ctx.save();
+        ctx.rotate(player.angle);
+
+        // 태풍 소용돌이 배경
+        ctx.fillStyle = 'rgba(245, 246, 250, 0.3)';
+        ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI*2); ctx.fill();
+
+        // 4개의 뻗어나가는 나선 팔 (Wind bands)
+        const armCount = 4;
+        for(let i=0; i<armCount; i++) {
+            ctx.save();
+            ctx.rotate(i * (Math.PI * 2 / armCount));
+            
+            // 메인 나선 팔 베지어 곡선 (반시계 회전에 맞게 꼬리가 시계방향으로 휘어짐)
+            ctx.beginPath();
+            ctx.moveTo(player.radius * 0.3, 0);
+            ctx.bezierCurveTo(
+                player.radius * 0.7, player.radius * 0.3,  // 제어점 1
+                player.radius * 0.9, player.radius * 0.9,  // 제어점 2
+                -player.radius * 0.2, player.radius * 1.3  // 끝점 
+            );
+            ctx.lineWidth = player.radius * 0.2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = player.color;
+            ctx.stroke();
+            
+            // 디테일한 흰색 바람결(질감) 추가
+            ctx.beginPath();
+            ctx.moveTo(player.radius * 0.3, 0);
+            ctx.bezierCurveTo(
+                player.radius * 0.6, player.radius * 0.4,
+                player.radius * 0.8, player.radius * 0.8,
+                -player.radius * 0.1, player.radius * 1.2
+            );
+            ctx.lineWidth = player.radius * 0.05;
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        ctx.restore(); // 회전 종료 (얼굴은 똑바로 그려야 함)
+        
+        // 2. 고정된 이모티콘 얼굴 그리기 (회전의 영향을 받지 않음)
+        let r = player.radius;
+        
+        // 얼굴 바탕 (태풍의 눈 영역)
+        ctx.fillStyle = player.level >= 4 ? '#333' : '#fff'; // 고레벨에선 어두운 얼굴
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.5, 0, Math.PI*2); ctx.fill();
+        
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // 레벨별 표정 렌더링
+        if (player.level === 1) {
+            // Lv.1 아기 태풍 씨앗 (초롱초롱한 눈, 빵긋 미소)
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath(); ctx.arc(-r*0.15, -r*0.1, r*0.08, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(r*0.15, -r*0.1, r*0.08, 0, Math.PI*2); ctx.fill();
+            // 눈 반짝임
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-r*0.15 + r*0.02, -r*0.1 - r*0.02, r*0.03, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(r*0.15 + r*0.02, -r*0.1 - r*0.02, r*0.03, 0, Math.PI*2); ctx.fill();
+            // 미소
+            ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = r*0.03;
+            ctx.beginPath(); ctx.arc(0, r*0.05, r*0.1, 0, Math.PI); ctx.stroke();
+            
+        } else if (player.level === 2) {
+            // Lv.2 소형 태풍 (다부진 꼬마, 당찬 미소)
+            ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = r*0.03;
+            ctx.beginPath(); ctx.moveTo(-r*0.25, -r*0.2); ctx.lineTo(-r*0.1, -r*0.15); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(r*0.25, -r*0.2); ctx.lineTo(r*0.1, -r*0.15); ctx.stroke();
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath(); ctx.arc(-r*0.15, -r*0.05, r*0.06, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(r*0.15, -r*0.05, r*0.06, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(0, r*0.1, r*0.12, 0, Math.PI*0.8); ctx.stroke();
+            
+        } else if (player.level === 3) {
+            // Lv.3 중형 태풍 (화난 청소년, 일자 입)
+            ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = r*0.04;
+            ctx.beginPath(); ctx.moveTo(-r*0.25, -r*0.2); ctx.lineTo(-r*0.1, -r*0.1); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(r*0.25, -r*0.2); ctx.lineTo(r*0.1, -r*0.1); ctx.stroke();
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath(); ctx.moveTo(-r*0.2, -r*0.05); ctx.lineTo(-r*0.1, -r*0.05); ctx.lineTo(-r*0.15, -r*0.1); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(r*0.2, -r*0.05); ctx.lineTo(r*0.1, -r*0.05); ctx.lineTo(r*0.15, -r*0.1); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(-r*0.1, r*0.15); ctx.lineTo(r*0.1, r*0.15); ctx.stroke();
+            
+        } else if (player.level === 4) {
+            // Lv.4 대형 태풍 (포효하는 괴수, 노란 눈)
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = r*0.04; 
+            ctx.beginPath(); ctx.moveTo(-r*0.25, -r*0.25); ctx.lineTo(-r*0.05, -r*0.15); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(r*0.25, -r*0.25); ctx.lineTo(r*0.05, -r*0.15); ctx.stroke();
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath(); ctx.arc(-r*0.15, -r*0.05, r*0.07, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(r*0.15, -r*0.05, r*0.07, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#e74c3c'; 
+            ctx.beginPath(); 
+            ctx.moveTo(-r*0.15, r*0.1); ctx.lineTo(-r*0.05, r*0.05); ctx.lineTo(0, r*0.15); 
+            ctx.lineTo(r*0.05, r*0.05); ctx.lineTo(r*0.15, r*0.1); 
+            ctx.lineTo(r*0.1, r*0.25); ctx.lineTo(-r*0.1, r*0.25); ctx.fill();
+            
+        } else if (player.level === 5) {
+            // Lv.5 초강력 태풍 (붉은 안광, 날카로운 이빨, 번개)
+            ctx.fillStyle = '#e74c3c'; 
+            ctx.beginPath(); ctx.moveTo(-r*0.25, -r*0.15); ctx.lineTo(-r*0.05, -r*0.05); ctx.lineTo(-r*0.15, -r*0.02); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(r*0.25, -r*0.15); ctx.lineTo(r*0.05, -r*0.05); ctx.lineTo(r*0.15, -r*0.02); ctx.fill();
+            
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(0, r*0.15, r*0.15, 0, Math.PI); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); 
+            ctx.moveTo(-r*0.1, r*0.15); ctx.lineTo(-r*0.05, r*0.25); 
+            ctx.lineTo(0, r*0.15); ctx.lineTo(r*0.05, r*0.25); 
+            ctx.lineTo(r*0.1, r*0.15); ctx.fill();
+
+            // 태풍 주변의 무작위 번개 효과
+            if (Math.random() < 0.3) {
+                ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = r*0.03;
+                ctx.beginPath(); 
+                ctx.moveTo(-r*0.3, -r*0.2); ctx.lineTo(-r*0.4, -r*0.1); ctx.lineTo(-r*0.3, 0); ctx.lineTo(-r*0.4, r*0.2);
+                ctx.stroke();
+            }
+        }
+        
+        ctx.restore(); // 전체 좌표계 복구
+
+        // 플로팅 텍스트 그리기
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let ft of floatingTexts) {
+            ctx.globalAlpha = ft.life;
+            ctx.font = 'bold 24px Jua';
+            // 그림자/테두리
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 4;
+            ctx.strokeText(ft.text, ft.x, ft.y);
+            
+            ctx.fillStyle = ft.color;
+            ctx.fillText(ft.text, ft.x, ft.y);
+        }
+        ctx.globalAlpha = 1.0;
+
+        ctx.restore(); // 월드 좌표계 끝
+
+        // --- 화면 고정 UI 계층 ---
+        
+        // 목표가 활성화되었을 때, 타겟을 가리키는 화살표 네비게이터 그리기
+        if (TARGET_ZONE.active) {
+            let dx = TARGET_ZONE.x - player.x;
+            let dy = TARGET_ZONE.y - player.y;
+            let dist = Math.hypot(dx, dy);
+
+            // 타겟이 화면 밖일 때만 화살표 표시
+            if (dist > canvas.width / 2) {
+                let angle = Math.atan2(dy, dx);
+                let cx = canvas.width / 2;
+                let cy = canvas.height / 2;
+                
+                // 화면 가장자리 반경 계산
+                let r = Math.min(cx, cy) - 50; 
+                let arrowX = cx + Math.cos(angle) * r;
+                let arrowY = cy + Math.sin(angle) * r;
+
+                ctx.save();
+                ctx.translate(arrowX, arrowY);
+                ctx.rotate(angle);
+                
+                // 화살표 그리기
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath();
+                ctx.moveTo(20, 0);
+                ctx.lineTo(-20, 15);
+                ctx.lineTo(-10, 0);
+                ctx.lineTo(-20, -15);
+                ctx.fill();
+                
+                // 거리 텍스트
+                ctx.rotate(-angle); // 텍스트는 똑바로
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px Jua';
+                ctx.fillText(`${Math.floor(dist/10)}km`, 0, 30);
+                
+                ctx.restore();
+            }
+        }
+    }
+
+    // --- 메인 루프 ---
+    function gameLoop(timestamp) {
+        if (!lastTime) lastTime = timestamp;
+        let dt = (timestamp - lastTime) / 1000.0; // 초 단위 델타타임
+        lastTime = timestamp;
+
+        // 최대 dt 제한 (탭 전환 시 튀는 현상 방지)
+        if (dt > 0.1) dt = 0.1;
+
+        update(dt);
+        draw();
+
+        if (gameState === 'PLAYING') {
+            requestAnimationFrame(gameLoop);
+        }
+    }
+
+</script>
+</body>
+</html>
